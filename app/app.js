@@ -24,8 +24,58 @@ app.get('/', function (req, res) {
 });
 
 io.on('connection', function (socket) {
-  socket.emit('news', { hello: 'world' });
-  socket.on('my other event', function (data) {
-    console.log(data);
+
+  socket.on('message', function(message) {
+    log('S --> Got message: ', message);
+    socket.to(message.channel).emit('message', message.message);
   });
+
+  socket.on('create or join', function(channel) {
+    var numClients = io.sockets.clients(channel).length;
+    console.log('numclients = ' + numClients);
+    // First client joining...
+    if (numClients == 0) {
+      socket.join(channel);
+      socket.emit('created', channel);
+      // Second client joining...
+    } else if (numClients == 1) {
+      // Inform initiator...
+      io.sockets.in(channel).emit('remotePeerJoining', channel);
+      // Let the new peer join channel
+      socket.join(channel);
+      socket.to(channel).emit('broadcast: joined', 'S --> broadcast(): client ' + socket.id + ' joined channel ' + channel);
+    } else {
+    // max two clients
+      console.log("Channel full!");
+      socket.emit('full', channel);
+    }
+  });
+
+  socket.on('response', function(response) {
+    log('S --> Got response: ', response);
+    // Just forward message to the other peer
+    socket.to(response.channel).emit('response', response.message);
+  });
+
+  socket.on('Bye', function(channel) {
+    // Notify other peer
+    socket.to(channel).emit('Bye');
+    // Close socket from server's side
+    socket.disconnect();
+  });
+
+  socket.on('Ack', function() {
+    console.log('Got an Ack!');
+    // Close socket from server's side
+    socket.disconnect();
+  });
+
+  function log() {
+    var array = [">>> "];
+    for (var i = 0; i < arguments.length; i++) {
+      array.push(arguments[i]);
+      socket.emit('log', array);
+    }
+  }
+
 });
